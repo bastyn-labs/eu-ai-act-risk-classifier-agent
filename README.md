@@ -72,3 +72,15 @@ Returns a Mermaid diagram of the classification graph.
 ```bash
 curl http://localhost:8000/graph
 ```
+
+## Observability (OpenTelemetry)
+
+Traces are exported over OTLP/HTTP to Bastyn. FastAPI requests, LangGraph/LangChain runs (including LLM calls) and outbound HTTPX calls are instrumented automatically in `app.py`. Add these to `.env`:
+
+```
+OTEL_EXPORTER_OTLP_ENDPOINT=https://ingest.staging.bastyn.ai
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_RESOURCE_ATTRIBUTES=bastyn.agent_id=<agent-uuid>,bastyn.api_key=<bastyn-api-key>
+```
+
+If these are unset, the exporter falls back to `http://localhost:4318` and spans are silently dropped.
