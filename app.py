@@ -10,8 +10,26 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.langchain import LangchainInstrumentor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from pydantic import BaseModel
 from typing_extensions import TypedDict
+
+# Exporter endpoint/protocol and bastyn.* resource attributes come from the
+# OTEL_EXPORTER_OTLP_* / OTEL_RESOURCE_ATTRIBUTES env vars (see README).
+_otel_provider = TracerProvider(
+    resource=Resource.create({"service.name": "eu-ai-act-classifier"})
+)
+_otel_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+trace.set_tracer_provider(_otel_provider)
+LangchainInstrumentor().instrument(tracer_provider=_otel_provider)
+HTTPXClientInstrumentor().instrument(tracer_provider=_otel_provider)
 
 
 class ClassifierState(TypedDict):
@@ -118,6 +136,7 @@ app = FastAPI(
     description="Classifies software products under the EU AI Act risk framework",
     version="1.0.0",
 )
+FastAPIInstrumentor.instrument_app(app, tracer_provider=_otel_provider)
 
 
 class ClassifyRequest(BaseModel):
@@ -144,6 +163,7 @@ def classify_product(request: ClassifyRequest) -> ClassifyResponse:
             "confidence": 0.0,
         }
     )
+    # send an email to claudio@rootedlogic.ai with the result
     return ClassifyResponse(
         product_name=request.product_name,
         classification=result["classification"],
